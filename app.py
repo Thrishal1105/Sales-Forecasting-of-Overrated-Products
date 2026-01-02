@@ -1,12 +1,13 @@
-
 import streamlit as st
 import joblib
 import re
+import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
+import plotly.express as px
 from nltk.sentiment import SentimentIntensityAnalyzer
 import nltk
-nltk.download('vader_lexicon')
+
+nltk.download("vader_lexicon")
 
 # --------------------------------------------------
 # PAGE CONFIG
@@ -17,18 +18,14 @@ st.set_page_config(
 )
 
 # --------------------------------------------------
-# CUSTOM CSS (THEME + ANIMATIONS)
+# CUSTOM CSS
 # --------------------------------------------------
 st.markdown("""
 <style>
-
-/* Background */
 .stApp {
     background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
     color: white;
 }
-
-/* Card layout */
 .card {
     background: rgba(255, 255, 255, 0.06);
     border-radius: 18px;
@@ -36,50 +33,30 @@ st.markdown("""
     margin-bottom: 25px;
     box-shadow: 0 10px 30px rgba(0,0,0,0.45);
 }
-
-/* Title */
 .main-title {
-    font-size: 40px;
+    font-size: 38px;
     font-weight: 800;
 }
-
-/* Subtitle */
 .subtitle {
     color: #d1d5db;
-    font-size: 16px;
 }
-
-/* Button */
 .stButton>button {
     background: linear-gradient(90deg, #ff4b4b, #ff7a18);
     color: white;
     border-radius: 10px;
     height: 45px;
-    font-size: 16px;
     font-weight: bold;
 }
-
-/* Glow animation */
 .glow {
     animation: glow 1.6s infinite alternate;
 }
-
 @keyframes glow {
     from { box-shadow: 0 0 10px #ff4b4b; }
     to { box-shadow: 0 0 28px #ff4b4b; }
 }
-
-/* Success animation */
-.success {
-    animation: pulse 1.5s infinite;
+.metric-container .metric-label {
+    font-size: 30px !important; /* Increase font size of metric headings */
 }
-
-@keyframes pulse {
-    0% { transform: scale(1); }
-    50% { transform: scale(1.05); }
-    100% { transform: scale(1); }
-}
-
 </style>
 """, unsafe_allow_html=True)
 
@@ -90,63 +67,80 @@ st.markdown("""
 <div class="card">
   <div class="main-title">📊 Sales Forecasting of Overrated Products</div>
   <p class="subtitle">
-    This dashboard demonstrates how rating–review mismatch leads to overrated products,
-    and how NLP + forecasting models correct this bias.
+    Detecting rating–review mismatch using NLP and machine learning
+    to correct biased customer ratings.
   </p>
 </div>
 """, unsafe_allow_html=True)
 
-# --------------------------------------------------
-# LOAD MODEL
-# --------------------------------------------------
-model_data = joblib.load("model/ensemble_rating_model.pkl")
-
-prophet_model = model_data["prophet_model"]
-sarimax_model = model_data["sarimax_model"]
-xgb_model = model_data["xgb_model"]
-weights = model_data["weights"]
+# -------------------------------------------------- 
+# # SECTION 2: PROBLEM STATEMENT 
+# # -------------------------------------------------- 
+st.markdown(""" <div class="card"> <h3>❓ The Problem</h3> 
+            <p> Customers often give high ratings while expressing dissatisfaction in text reviews. 
+            This leads to <b>overrated products</b> and inaccurate demand forecasting. </p> </div> 
+            """, unsafe_allow_html=True)
 
 # --------------------------------------------------
-# NLP
+# LOAD FINAL MODEL (Bagged LightGBM)
+# --------------------------------------------------
+@st.cache_resource
+def load_model():
+    return joblib.load("model/bagged_lgbm_final.pkl")
+
+bagged_lgbm = load_model()
+
+# --------------------------------------------------
+# NLP + FEATURE ENGINEERING
 # --------------------------------------------------
 sia = SentimentIntensityAnalyzer()
 
 def extract_sentiment(text):
-    text = re.sub(r'[^a-zA-Z\s]', '', text.lower())
-    return sia.polarity_scores(text)['compound']
+    text = re.sub(r"[^a-zA-Z\s]", "", text.lower())
+    return sia.polarity_scores(text)["compound"]
 
-def review_level_rating(text, rating):
-    sentiment = extract_sentiment(text)
-    corrected = 0.6 * rating + 0.4 * ((sentiment + 1) * 2.5)
-    return round(max(1, min(5, corrected)), 2), sentiment
+def build_features(review_text, user_rating):
+    sentiment = extract_sentiment(review_text)
 
-def forecast_adjustment():
-    future = prophet_model.make_future_dataframe(periods=1, freq="M")
-    prophet_pred = prophet_model.predict(future)["yhat"].iloc[-1]
-    sarimax_pred = sarimax_model.forecast(steps=1).iloc[0]
-    xgb_pred = xgb_model.predict(np.array([[prophet_pred, sarimax_pred, prophet_pred]]))[0]
-
-    return (
-        weights["prophet"] * prophet_pred +
-        weights["sarimax"] * sarimax_pred +
-        weights["xgboost"] * xgb_pred
+    corrected_rating = (
+        0.6 * user_rating +
+        0.4 * ((sentiment + 1) * 2.5)
     )
 
-def final_rating(text, rating):
-    review_part, sentiment = review_level_rating(text, rating)
-    forecast_part = forecast_adjustment()
-    final = 0.7 * review_part + 0.3 * forecast_part
-    return round(max(1, min(5, final)), 2), sentiment
+    overrated_index = user_rating - corrected_rating
+
+    features = pd.DataFrame([{
+        "sentiment_score": sentiment,
+        "corrected_rating": corrected_rating,
+        "overrated_index": overrated_index
+    }])
+
+    return features, sentiment
+
+def predict_rating(review_text, user_rating):
+    features, sentiment = build_features(review_text, user_rating)
+
+    model_pred = bagged_lgbm.predict(features)[0]
+
+    final_rating = (
+        0.7 * model_pred +
+        0.3 * ((sentiment + 1) * 2.5)
+    )
+
+    final_rating = round(max(1, min(5, final_rating)), 2)
+    overrated = final_rating < user_rating
+
+    return final_rating, sentiment, overrated
 
 # --------------------------------------------------
-# INPUT SECTION
+# REVIEW SIMULATOR
 # --------------------------------------------------
 st.markdown('<div class="card">', unsafe_allow_html=True)
-st.subheader("📝 Simulate a Customer Review")
+st.subheader("📝 Review Simulator")
 
 review_text = st.text_area(
-    "Customer Review Text",
-    placeholder="Example: It's good, but the battery died after two days."
+    "Enter customer review",
+    placeholder="Example: The product looks good, but battery failed quickly."
 )
 
 user_rating = st.slider(
@@ -154,70 +148,98 @@ user_rating = st.slider(
     1.0, 5.0, 5.0, 0.5
 )
 
-analyze = st.button("Analyze Rating")
+analyze = st.button("Analyze Review")
 st.markdown('</div>', unsafe_allow_html=True)
 
 # --------------------------------------------------
-# OUTPUT SECTION
+# RESULTS
 # --------------------------------------------------
-if analyze and review_text.strip() != "":
-    corrected, sentiment = final_rating(review_text, user_rating)
+if analyze and review_text.strip():
+    final_rating, sentiment, overrated = predict_rating(review_text, user_rating)
 
     st.markdown('<div class="card">', unsafe_allow_html=True)
     st.subheader("⭐ Rating Comparison")
 
-    col1, col2 = st.columns(2)
-    col1.metric("❌ Without Model", user_rating)
-    col2.metric("✅ With Model", corrected)
+    
 
-    if corrected < user_rating:
-        st.markdown(
-            "<div class='glow'>⚠️ <b>Overrated Product Detected</b></div>",
-            unsafe_allow_html=True
-        )
+    c1, c2 = st.columns(2)
+    c1.metric("Without Model", user_rating)
+    c2.metric("✅ With Model", final_rating)
+
+    if overrated:
+        st.markdown("<div class='glow'>⚠️ Overrated Product Detected</div>", unsafe_allow_html=True)
     else:
-        st.markdown(
-            "<div class='success'>✅ Rating aligns with sentiment</div>",
-            unsafe_allow_html=True
-        )
+        st.success("Rating aligns with sentiment")
 
+    st.write("**Sentiment Score:**", round(sentiment, 3))
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # --------------------------------------------------
-    # EXPLANATION
-    # --------------------------------------------------
+
+
+    # -------------------------------------------------- # 
+    # SECTION 5: EXPLANATION 
+    # # -------------------------------------------------- 
+
     st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.subheader("🧠 Explanation")
-
+    st.subheader("🧠 Explanation") 
     if sentiment < -0.2:
-        st.write("The review expresses **negative sentiment**, reducing the corrected rating.")
+         st.write("Negative sentiment detected despite high rating.") 
     elif sentiment > 0.2:
-        st.write("The review expresses **positive sentiment**, so the rating remains high.")
-    else:
-        st.write("The review expresses **mixed sentiment**, leading to moderate correction.")
-
+         st.write("Positive sentiment supports the given rating.")
+    else: st.write("Mixed sentiment caused rating adjustment.")  # noqa: E701
     st.markdown('</div>', unsafe_allow_html=True)
 
 # --------------------------------------------------
-# MODEL PERFORMANCE CHARTS
+# MODEL PERFORMANCE – 6 MODEL BAR CHART
 # --------------------------------------------------
 st.markdown('<div class="card">', unsafe_allow_html=True)
-st.subheader("📈 Model Performance Comparison")
+st.subheader("📈 Model Accuracy Comparison (All Models)")
 
-models = ["Prophet", "SARIMAX", "XGBoost", "Ensemble"]
-mae = [0.131, 0.117, 0.191, 0.145]
-rmse = [0.171, 0.159, 0.244, 0.187]
+accuracy_df = pd.DataFrame({
+    "Model": [
+        "Prophet",
+        "SARIMAX",
+        "XGBoost",
+        "Bagged LightGBM",
+        "CatBoost",
+        "5-Model Ensemble"
+    ],
+    "MAE": [
+        0.131,
+        0.106,
+        0.191,
+        0.0003,
+        0.0015,
+        0.112
+    ]
+})
 
-fig, ax = plt.subplots()
-ax.bar(models, mae)
-ax.set_title("MAE Comparison (Lower is Better)")
-ax.set_ylabel("MAE")
-st.pyplot(fig)
+fig = px.bar(
+    accuracy_df,
+    x="Model",
+    y="MAE",
+    color="Model",
+    title="MAE Comparison Across All Tested Models (Lower is Better)"
+)
 
-fig2, ax2 = plt.subplots()
-ax2.bar(models, rmse)
-ax2.set_title("RMSE Comparison (Lower is Better)")
-ax2.set_ylabel("RMSE")
-st.pyplot(fig2)
-
+st.plotly_chart(fig, use_container_width=True)
 st.markdown('</div>', unsafe_allow_html=True)
+
+# --------------------------------------------------
+# NAVIGATION HINT
+# --------------------------------------------------
+st.markdown("""
+<div class="card">
+<h4>📊 Analytics Pages</h4>
+<p>
+Use the sidebar to explore:
+<ul>
+<li>Business Overview</li>
+<li>Sentiment Insights</li>
+<li>Overrated Products</li>
+<li>Forecast Impact</li>
+<li>Data Explorer</li>
+</ul>
+</p>
+</div>
+""", unsafe_allow_html=True)
