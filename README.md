@@ -172,11 +172,11 @@ All models were evaluated using:
 | Model               | MAE ↓      | RMSE ↓     |
 | ------------------- | ---------- | ---------- |
 | Prophet             | 0.131      | 0.171      |
-| SARIMAX             | 0.117      | 0.159      |
+| SARIMAX             | 0.106      | 0.148      |
 | XGBoost             | 0.191      | 0.244      |
-| CatBoost            | 0.0015     | 0.0043     |
-| **Bagged LightGBM** | **0.0003** | **0.0026** |
-| 5-Model Ensemble    | 0.115      | 0.153      |
+| CatBoost            | 0.040      | 0.060      |
+| **Bagged LightGBM** | **0.015**  | **0.038**  |
+| 5-Model Ensemble    | 0.112      | 0.143      |
 
 🏆 **Conclusion:**
 Bagged LightGBM provides the **best accuracy, stability, and robustness** and is therefore selected as the final prediction model.
