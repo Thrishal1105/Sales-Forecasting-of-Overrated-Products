@@ -107,8 +107,8 @@ st.markdown(
     | Prophet | 0.131 | 0.171 |
     | SARIMAX | 0.106 | 0.148 |
     | XGBoost | 0.191 | 0.244 |
-    | Bagged LightGBM | **0.0003** | **0.0026** |
-    | CatBoost | 0.0015 | 0.0043 |
+    | Bagged LightGBM | **0.015** | **0.038** |
+    | CatBoost | 0.040 | 0.060 |
     | 5-Model Ensemble | 0.112 | 0.143 |
     """
 )
