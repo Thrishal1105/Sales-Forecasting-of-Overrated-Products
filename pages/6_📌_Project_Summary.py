@@ -102,14 +102,15 @@ st.header("📈 Model Performance Summary")
 
 st.markdown(
     """
-    | Model | MAE ↓ | RMSE ↓ |
-    |------|------|-------|
-    | Prophet | 0.131 | 0.171 |
-    | SARIMAX | 0.106 | 0.148 |
-    | XGBoost | 0.191 | 0.244 |
-    | Bagged LightGBM | **0.012** | **0.038** |
-    | CatBoost | 0.037 | 0.060 |
-    | 5-Model Ensemble | 0.112 | 0.143 |
+    | Model               | MAE ↓      | RMSE ↓     |
+    |---------------------|------------|------------|
+    | Prophet             | 0.1310     | 0.1710     |
+    | SARIMAX             | 0.1060     | 0.1470     |
+    | XGBoost             | 0.1910     | 0.2440     |
+    | Bagged LightGBM     | **0.0003** | **0.0026** |
+    | CatBoost            | 0.0015     | 0.0043     |
+    | 5-Model Ensemble    | 0.1120     | 0.1430     |
+    | Random Forest       | 0.0388     | 0.0610     |
     """
 )
 

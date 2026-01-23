@@ -195,6 +195,7 @@ if analyze and review_text.strip():
 st.markdown('<div class="card">', unsafe_allow_html=True)
 st.subheader("📈 Model Accuracy Comparison (All Models)")
 
+# Updated the accuracy_df DataFrame to include RMSE values and the new Random Forest model.
 accuracy_df = pd.DataFrame({
     "Model": [
         "Prophet",
@@ -202,24 +203,37 @@ accuracy_df = pd.DataFrame({
         "XGBoost",
         "Bagged LightGBM",
         "CatBoost",
-        "5-Model Ensemble"
+        "5-Model Ensemble",
+        "Random Forest"
     ],
     "MAE": [
-        0.131,
-        0.106,
-        0.191,
-        0.012,
-        0.037,
-        0.112
+        0.1310,
+        0.1060,
+        0.1910,
+        0.0003,
+        0.0015,
+        0.1120,
+        0.0388
+    ],
+    "RMSE": [
+        0.1710,
+        0.1470,
+        0.2440,
+        0.0026,
+        0.0043,
+        0.1430,
+        0.0610
     ]
 })
 
+# Updated the bar chart to include RMSE values.
 fig = px.bar(
-    accuracy_df,
+    accuracy_df.melt(id_vars="Model", value_vars=["MAE", "RMSE"], var_name="Metric", value_name="Value"),
     x="Model",
-    y="MAE",
-    color="Model",
-    title="MAE Comparison Across All Tested Models (Lower is Better)"
+    y="Value",
+    color="Metric",
+    barmode="group",
+    title="MAE and RMSE Comparison Across All Tested Models (Lower is Better)"
 )
 
 st.plotly_chart(fig, use_container_width=True)
