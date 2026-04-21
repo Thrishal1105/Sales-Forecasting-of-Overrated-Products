@@ -146,6 +146,7 @@ data/processed_reviews.parquet
 * XGBoost
 * **Bagged LightGBM**
 * CatBoost
+* Random Forest
 
 ### Visualization & UI
 
